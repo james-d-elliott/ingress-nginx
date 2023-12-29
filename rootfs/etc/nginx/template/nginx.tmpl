@@ -1346,7 +1346,10 @@ stream {
             {{ end }}
             {{ end }}
 
-            {{ if $externalAuth.SigninURL }}
+            {{ if $externalAuth.SigninURLRedirectHeader }}
+            auth_request_set $redirection_url {{ buildHeaderVariable $externalAuth.SigninURLRedirectHeader true }};
+            error_page 401 =302 $redirection_url;
+            {{ else if $externalAuth.SigninURL }}
             set_escape_uri $escaped_request_uri $request_uri;
             error_page 401 = {{ buildAuthSignURLLocation $location.Path $externalAuth.SigninURL }};
             {{ end }}

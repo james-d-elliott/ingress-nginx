@@ -33,21 +33,22 @@ import (
 )
 
 const (
-	authReqURLAnnotation                = "auth-url"
-	authReqMethodAnnotation             = "auth-method"
-	authReqSigninAnnotation             = "auth-signin"
-	authReqSigninRedirParamAnnotation   = "auth-signin-redirect-param"
-	authReqSnippetAnnotation            = "auth-snippet"
-	authReqCacheKeyAnnotation           = "auth-cache-key"
-	authReqKeepaliveAnnotation          = "auth-keepalive"
-	authReqKeepaliveShareVarsAnnotation = "auth-keepalive-share-vars"
-	authReqKeepaliveRequestsAnnotation  = "auth-keepalive-requests"
-	authReqKeepaliveTimeout             = "auth-keepalive-timeout"
-	authReqCacheDuration                = "auth-cache-duration"
-	authReqResponseHeadersAnnotation    = "auth-response-headers"
-	authReqProxySetHeadersAnnotation    = "auth-proxy-set-headers"
-	authReqRequestRedirectAnnotation    = "auth-request-redirect"
-	authReqAlwaysSetCookieAnnotation    = "auth-always-set-cookie"
+	authReqURLAnnotation                     = "auth-url"
+	authReqMethodAnnotation                  = "auth-method"
+	authReqSigninAnnotation                  = "auth-signin"
+	authReqSigninRedirParamAnnotation        = "auth-signin-redirect-param"
+	authReqSigninURLRedirectHeaderAnnotation = "auth-signin-redirect-header"
+	authReqSnippetAnnotation                 = "auth-snippet"
+	authReqCacheKeyAnnotation                = "auth-cache-key"
+	authReqKeepaliveAnnotation               = "auth-keepalive"
+	authReqKeepaliveShareVarsAnnotation      = "auth-keepalive-share-vars"
+	authReqKeepaliveRequestsAnnotation       = "auth-keepalive-requests"
+	authReqKeepaliveTimeout                  = "auth-keepalive-timeout"
+	authReqCacheDuration                     = "auth-cache-duration"
+	authReqResponseHeadersAnnotation         = "auth-response-headers"
+	authReqProxySetHeadersAnnotation         = "auth-proxy-set-headers"
+	authReqRequestRedirectAnnotation         = "auth-request-redirect"
+	authReqAlwaysSetCookieAnnotation         = "auth-always-set-cookie"
 
 	// This should be exported as it is imported by other packages
 	AuthSecretAnnotation = "auth-secret"
@@ -70,6 +71,12 @@ var authReqAnnotations = parser.Annotation{
 		},
 		authReqSigninAnnotation: {
 			Validator:     parser.ValidateRegex(parser.URLWithNginxVariableRegex, true),
+			Scope:         parser.AnnotationScopeLocation,
+			Risk:          parser.AnnotationRiskHigh,
+			Documentation: `This annotation allows to specify the location of the error page`,
+		},
+		authReqSigninURLRedirectHeaderAnnotation: {
+			Validator:     parser.ValidateRegex(parser.BasicCharsRegex, true),
 			Scope:         parser.AnnotationScopeLocation,
 			Risk:          parser.AnnotationRiskHigh,
 			Documentation: `This annotation allows to specify the location of the error page`,
@@ -155,21 +162,22 @@ var authReqAnnotations = parser.Annotation{
 type Config struct {
 	URL string `json:"url"`
 	// Host contains the hostname defined in the URL
-	Host                   string            `json:"host"`
-	SigninURL              string            `json:"signinUrl"`
-	SigninURLRedirectParam string            `json:"signinUrlRedirectParam,omitempty"`
-	Method                 string            `json:"method"`
-	ResponseHeaders        []string          `json:"responseHeaders,omitempty"`
-	RequestRedirect        string            `json:"requestRedirect"`
-	AuthSnippet            string            `json:"authSnippet"`
-	AuthCacheKey           string            `json:"authCacheKey"`
-	AuthCacheDuration      []string          `json:"authCacheDuration"`
-	KeepaliveConnections   int               `json:"keepaliveConnections"`
-	KeepaliveShareVars     bool              `json:"keepaliveShareVars"`
-	KeepaliveRequests      int               `json:"keepaliveRequests"`
-	KeepaliveTimeout       int               `json:"keepaliveTimeout"`
-	ProxySetHeaders        map[string]string `json:"proxySetHeaders,omitempty"`
-	AlwaysSetCookie        bool              `json:"alwaysSetCookie,omitempty"`
+	Host                    string            `json:"host"`
+	SigninURL               string            `json:"signinUrl"`
+	SigninURLRedirectParam  string            `json:"signinUrlRedirectParam,omitempty"`
+	SigninURLRedirectHeader string            `json:"signinUrlRedirectHeader,omitempty"`
+	Method                  string            `json:"method"`
+	ResponseHeaders         []string          `json:"responseHeaders,omitempty"`
+	RequestRedirect         string            `json:"requestRedirect"`
+	AuthSnippet             string            `json:"authSnippet"`
+	AuthCacheKey            string            `json:"authCacheKey"`
+	AuthCacheDuration       []string          `json:"authCacheDuration"`
+	KeepaliveConnections    int               `json:"keepaliveConnections"`
+	KeepaliveShareVars      bool              `json:"keepaliveShareVars"`
+	KeepaliveRequests       int               `json:"keepaliveRequests"`
+	KeepaliveTimeout        int               `json:"keepaliveTimeout"`
+	ProxySetHeaders         map[string]string `json:"proxySetHeaders,omitempty"`
+	AlwaysSetCookie         bool              `json:"alwaysSetCookie,omitempty"`
 }
 
 // DefaultCacheDuration is the fallback value if no cache duration is provided
@@ -342,6 +350,23 @@ func (a authReq) Parse(ing *networking.Ingress) (interface{}, error) {
 		klog.V(3).Infof("auth-signin-redirect-param annotation is undefined and will not be set")
 	}
 
+	signInFromHeader, err := parser.GetStringAnnotation(authReqSigninURLRedirectHeaderAnnotation, ing, a.annotationConfig.Annotations)
+	if err != nil {
+		if ing_errors.IsValidationError(err) {
+			klog.Warningf("%s value is invalid: %s", authReqSigninURLRedirectHeaderAnnotation, err)
+		}
+		klog.V(3).InfoS("auth-signin-header annotation is undefined and will not be set")
+	}
+	if signInFromHeader != "" {
+		if !ValidHeader(signInFromHeader) {
+			return nil, ing_errors.NewLocationDenied("auth-signin-header does not have a valid header name")
+		}
+
+		if signIn != "" {
+			return nil, ing_errors.NewLocationDenied("auth-signin and auth-signin-header both assigned for location but are mutually exclusive")
+		}
+	}
+
 	authSnippet, err := parser.GetStringAnnotation(authReqSnippetAnnotation, ing, a.annotationConfig.Annotations)
 	if err != nil {
 		klog.V(3).InfoS("auth-snippet annotation is undefined and will not be set")
@@ -477,22 +502,23 @@ func (a authReq) Parse(ing *networking.Ingress) (interface{}, error) {
 	}
 
 	return &Config{
-		URL:                    urlString,
-		Host:                   authURL.Hostname(),
-		SigninURL:              signIn,
-		SigninURLRedirectParam: signInRedirectParam,
-		Method:                 authMethod,
-		ResponseHeaders:        responseHeaders,
-		RequestRedirect:        requestRedirect,
-		AuthSnippet:            authSnippet,
-		AuthCacheKey:           authCacheKey,
-		AuthCacheDuration:      authCacheDuration,
-		KeepaliveConnections:   keepaliveConnections,
-		KeepaliveShareVars:     keepaliveShareVars,
-		KeepaliveRequests:      keepaliveRequests,
-		KeepaliveTimeout:       keepaliveTimeout,
-		ProxySetHeaders:        proxySetHeaders,
-		AlwaysSetCookie:        alwaysSetCookie,
+		URL:                     urlString,
+		Host:                    authURL.Hostname(),
+		SigninURL:               signIn,
+		SigninURLRedirectHeader: signInFromHeader,
+		SigninURLRedirectParam:  signInRedirectParam,
+		Method:                  authMethod,
+		ResponseHeaders:         responseHeaders,
+		RequestRedirect:         requestRedirect,
+		AuthSnippet:             authSnippet,
+		AuthCacheKey:            authCacheKey,
+		AuthCacheDuration:       authCacheDuration,
+		KeepaliveConnections:    keepaliveConnections,
+		KeepaliveShareVars:      keepaliveShareVars,
+		KeepaliveRequests:       keepaliveRequests,
+		KeepaliveTimeout:        keepaliveTimeout,
+		ProxySetHeaders:         proxySetHeaders,
+		AlwaysSetCookie:         alwaysSetCookie,
 	}, nil
 }
 

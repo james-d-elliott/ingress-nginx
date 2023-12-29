@@ -283,6 +283,7 @@ var funcMap = text_template.FuncMap{
 	"shouldLoadAuthDigestModule":         shouldLoadAuthDigestModule,
 	"buildServerName":                    buildServerName,
 	"buildCorsOriginRegex":               buildCorsOriginRegex,
+	"buildHeaderVariable":                buildHeaderVariable,
 }
 
 // escapeLiteralDollar will replace the $ character with ${literal_dollar}
@@ -1753,4 +1754,18 @@ func buildCorsOriginRegex(corsOrigins []string) string {
 	}
 	originsRegex += ")$ ) { set $cors 'true'; }"
 	return originsRegex
+}
+
+func buildHeaderVariable(name string, upstream bool) string {
+	b := &strings.Builder{}
+
+	b.WriteString("$")
+	if upstream {
+		b.WriteString("upstream_")
+	}
+
+	b.WriteString("http_")
+	b.WriteString(strings.ToLower(strings.ReplaceAll(name, "-", "_")))
+
+	return b.String()
 }
