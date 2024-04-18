@@ -509,6 +509,8 @@ Additionally it is possible to set:
   `<SignIn_URL>` to specify the location of the error page.
 * `nginx.ingress.kubernetes.io/auth-signin-redirect-param`:
   `<SignIn_URL>` to specify the URL parameter in the error page which should contain the original URL for a failed signin request.
+* `nginx.ingress.kubernetes.io/auth-signin-redirect-header`:
+  `<SignIn_URL>` to specify the header name to use for the redirect instead of `nginx.ingress.kubernetes.io/auth-signin` and `nginx.ingress.kubernetes.io/auth-signin-redirect-param`. Assumes the entire content represents the correct redirect location.
 * `nginx.ingress.kubernetes.io/auth-response-headers`:
   `<Response_Header_1, ..., Response_Header_n>` to specify headers to pass to backend once authentication request completes.
 * `nginx.ingress.kubernetes.io/auth-proxy-set-headers`:

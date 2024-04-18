@@ -60,6 +60,7 @@ const (
 	globalAuthMethod              = "global-auth-method"
 	globalAuthSignin              = "global-auth-signin"
 	globalAuthSigninRedirectParam = "global-auth-signin-redirect-param"
+	globalAuthSigninFromHeader    = "global-auth-signin-header"
 	globalAuthResponseHeaders     = "global-auth-response-headers"
 	globalAuthRequestRedirect     = "global-auth-request-redirect"
 	globalAuthSnippet             = "global-auth-snippet"
@@ -306,6 +307,18 @@ func ReadConfig(src map[string]string) config.Configuration {
 			klog.Warningf("Global auth redirect parameter denied - %v.", "global-auth-signin-redirect-param setting is invalid and will not be set")
 		} else {
 			to.GlobalExternalAuth.SigninURLRedirectParam = redirectParam
+		}
+	}
+
+	if val, ok := conf[globalAuthSigninFromHeader]; ok {
+		delete(conf, globalAuthSigninFromHeader)
+
+		if val != "" {
+			if !authreq.ValidHeader(val) {
+				klog.Warningf("Global auth location denied - %v.", "invalid auth signin redirect header")
+			} else {
+				to.GlobalExternalAuth.SigninURLRedirectHeader = val
+			}
 		}
 	}
 

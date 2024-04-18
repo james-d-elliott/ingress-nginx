@@ -30,6 +30,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pmezard/go-difflib/difflib"
+	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -2037,5 +2038,33 @@ func TestCleanConf(t *testing.T) {
 			t.Error("failed to get diff for cleanConf", err)
 		}
 		t.Errorf("cleanConf result don't match with expected: %s", diff)
+	}
+}
+
+func TestBuildHeaderVariable(t *testing.T) {
+	testCases := []struct {
+		name     string
+		have     string
+		upstream bool
+		expected string
+	}{
+		{
+			"ShouldHandleLocationHeader",
+			"Location",
+			true,
+			"$upstream_http_location",
+		},
+		{
+			"ShouldHandleXFFHeader",
+			"X_Forwarded-For",
+			false,
+			"$http_x_forwarded_for",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, buildHeaderVariable(tc.have, tc.upstream))
+		})
 	}
 }
